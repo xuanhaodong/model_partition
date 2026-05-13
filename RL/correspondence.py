@@ -23,8 +23,14 @@ class Correspondence(object):
 
 	def recv_message(self, sock, expect_msg_type=None):
 		msg_len = struct.unpack(">I", sock.recv(4))[0]
-		msg = sock.recv(msg_len, socket.MSG_WAITALL)
-		msg = pickle.loads(msg)
+		# 循环接收完整消息（兼容 Windows，MSG_WAITALL 在 Windows 上不可靠）
+		msg_bytes = bytearray()
+		while len(msg_bytes) < msg_len:
+			chunk = sock.recv(msg_len - len(msg_bytes))
+			if not chunk:
+				raise ConnectionError("Connection closed while receiving message")
+			msg_bytes.extend(chunk)
+		msg = pickle.loads(msg_bytes)
 		logger.debug(msg[0]+'received from'+str(sock.getpeername()[0])+':'+str(sock.getpeername()[1]))
 
 		if expect_msg_type is not None:

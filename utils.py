@@ -173,12 +173,17 @@ def recv_msg(sock, expect_msg_type=None):
 	:param expect_msg_type:
 	:return:
 	"""
-    # 接收消息长度
-    msg_len = struct.unpack(">I", sock.recv(4))[0]
-    # 接收整个消息
-    msg = sock.recv(msg_len, socket.MSG_WAITALL)
-    # 反序列化消息
-    msg = pickle.loads(msg)
+	# 接收消息长度
+	msg_len = struct.unpack(">I", sock.recv(4))[0]
+	# 循环接收完整消息（兼容 Windows）
+	msg_bytes = bytearray()
+	while len(msg_bytes) < msg_len:
+		chunk = sock.recv(msg_len - len(msg_bytes))
+		if not chunk:
+			raise ConnectionError("Connection closed while receiving message")
+		msg_bytes.extend(chunk)
+	# 反序列化消息
+	msg = pickle.loads(msg_bytes)
     logger.debug(msg[0] + 'received from' + str(sock.getpeername()[0]) + ':' + str(sock.getpeername()[1]))
 
     # 如果期望的消息类型不为空，并且接收到的消息类型不匹配，则抛出异常

@@ -1,111 +1,130 @@
 import sys
+import os
 """
  配置相关
+ ============================================================
+ 【部署前必读】请按你的实际环境修改以下带 ★ 标记的配置
+ ============================================================
+
+ 六节点部署拓扑：
+   主机A (Windows 32GB, i7-14700KF + 5060Ti)
+     ├─ 宿主机: RL Server + client1  (GPU)     ← 16GB 预留
+     ├─ VMware VM1: client2                     ← 4GB
+     └─ VMware VM2: client3                     ← 4GB
+   主机B (Ubuntu 16GB, i5-12600KF)
+     ├─ 宿主机: client4  (CPU)                  ← ~8GB
+     ├─ Docker 容器: client5                     ← ~4GB (共享宿主内存)
+     └─ Docker 容器: client6                     ← ~4GB (共享宿主内存)
 """
 
-# Network configration
-SERVER_ADDR = '192.168.215.128'
+# =============================================================
+#  ★ 需要手动填写的配置（共 6 个节点的 IP 和 hostname）
+# =============================================================
+# 获取 hostname 方法: python -c "import socket; print(socket.gethostname())"
+# 获取 IP 方法:       Windows → ipconfig | Ubuntu → ip addr
+#                     VM → ip addr | Docker → docker inspect <容器名>
+
+# ★ 主机A 宿主机（Windows，运行 RL Server + client1）
+MACHINE_A_IP       = '192.168.80.100'    # ★ 替换为主机A实际局域网 IP
+MACHINE_A_HOSTNAME = 'DESKTOP-XXXXX'     # ★ 替换为 python socket.gethostname() 输出
+
+# ★ VMware VM（在主机A上，桥接模式获得独立 IP）
+VM1_IP       = '192.168.80.131'          # ★ VM1 静态 IP
+VM1_HOSTNAME = 'vm-client2'              # ★ VM1 中 sudo hostnamectl set-hostname 设定的值
+VM2_IP       = '192.168.80.132'          # ★ VM2 静态 IP
+VM2_HOSTNAME = 'vm-client3'              # ★ VM2 中 sudo hostnamectl set-hostname 设定的值
+
+# ★ 主机B 宿主机（Ubuntu）
+MACHINE_B_IP       = '192.168.80.140'    # ★ 替换为主机B实际局域网 IP
+MACHINE_B_HOSTNAME = 'ubuntu-host'       # ★ 替换为主机B的 hostname
+
+# ★ Docker 容器（在主机B上，macvlan 模式获得独立 IP）
+DOCKER1_IP       = '192.168.80.141'      # ★ 容器1 分配的 IP
+DOCKER1_HOSTNAME = 'docker-client5'      # ★ docker run --hostname 指定的值
+DOCKER2_IP       = '192.168.80.142'      # ★ 容器2 分配的 IP
+DOCKER2_HOSTNAME = 'docker-client6'      # ★ docker run --hostname 指定的值
+
+# ★ SSH 凭证（VM 和 Docker 容器如不需要资源采集可用默认值）
+DEFAULT_SSH_USER = 'victor'              # ★ 通用 SSH 用户名
+DEFAULT_SSH_PASS = '123456'              # ★ 通用 SSH 密码
+
+# =============================================================
+#  以下配置基于上面的变量自动生成，一般不需要修改
+# =============================================================
+
+# RL Server 运行在主机A宿主机上
+SERVER_ADDR = MACHINE_A_IP
 SERVER_PORT = 51000
 
-
-# 本地服务器配置
-local_server_list = [
-    {
-        "name": "client1",
-        "ip": "127.0.0.1",
-        "username": "root",
-        "password": "123456",
-        "application": {
-            "VGG5": 9001
-        }
-    },
-    {
-        "name": "client2",
-        "ip": "127.0.0.1",
-        "username": "root",
-        "password": "123456",
-        "application": {
-            "VGG5": 9002
-        }
-    },
-    {
-        "name": "client3",
-        "ip": "127.0.0.1",
-        "username": "root",
-        "password": "123456",
-        "application": {
-            "VGG5": 9003
-        }
-    }
-]
-# 线上部署
+# 六节点部署配置
 server_list = [
     {
-        "ip": "192.168.215.133",
-        "username": "root",
-        "password": "123456",
-        "hostname": "client1",
-        "application": {
-            "VGG5": 9001,
-            "VGG6": 9002
-        }
+        "ip": MACHINE_A_IP,
+        "username": "administrator",
+        "password": DEFAULT_SSH_PASS,
+        "hostname": MACHINE_A_HOSTNAME,
+        "application": {"VGG5": 9001},
     },
     {
-        "ip": "192.168.215.128",
-        "username": "root",
-        "password": "123456",
-        "hostname": "client2",
-        "application": {
-            "VGG5": 9001,
-            "VGG6": 9002
-        }
+        "ip": VM1_IP,
+        "username": DEFAULT_SSH_USER,
+        "password": DEFAULT_SSH_PASS,
+        "hostname": VM1_HOSTNAME,
+        "application": {"VGG5": 9001},
     },
     {
-        "ip": "192.168.215.135",
-        "username": "root",
-        "password": "123456",
-        "hostname": "client3",
-        "application": {
-            "VGG5": 9001,
-            "VGG6": 9002
-        }
+        "ip": VM2_IP,
+        "username": DEFAULT_SSH_USER,
+        "password": DEFAULT_SSH_PASS,
+        "hostname": VM2_HOSTNAME,
+        "application": {"VGG5": 9001},
     },
     {
-        "ip": "192.168.215.137",
-        "username": "root",
-        "password": "123456",
-        "hostname": "client4",
-        "application": {
-            "VGG5": 9001,
-            "VGG6": 9002
-        }
-    }
-    # 添加更多服务器
+        "ip": MACHINE_B_IP,
+        "username": DEFAULT_SSH_USER,
+        "password": DEFAULT_SSH_PASS,
+        "hostname": MACHINE_B_HOSTNAME,
+        "application": {"VGG5": 9001},
+    },
+    {
+        "ip": DOCKER1_IP,
+        "username": DEFAULT_SSH_USER,
+        "password": DEFAULT_SSH_PASS,
+        "hostname": DOCKER1_HOSTNAME,
+        "application": {"VGG5": 9001},
+    },
+    {
+        "ip": DOCKER2_IP,
+        "username": DEFAULT_SSH_USER,
+        "password": DEFAULT_SSH_PASS,
+        "hostname": DOCKER2_HOSTNAME,
+        "application": {"VGG5": 9001},
+    },
 ]
+
 CLIENTS_LIST = [server["ip"] for server in server_list]
 dataset_config = {
     'VGG5': "vgg5",
     'VGG6': ""
 }
-# Dataset configration
-home = sys.path[0].split('SynerGist')[0] + 'SynerGist'
-dataset_path = home + '/dataset/vgg5/'
+# Dataset configuration
+home = os.path.dirname(os.path.abspath(__file__))
+dataset_path = os.path.join(home, 'dataset', 'vgg5')
 # data length
 N = 10000
 # Batch size
 B = 256
-# 迭代次数 N为数据总数，B为批次大小
 iterations = int(N / B)
 # Number of devices
 K = len(server_list)
-# Number of groups
+# Number of groups (KMeans clusters, must be <= K)
 G = 3
 model_name = 'VGG5'
 model_size = 1.28
 model_flops = 32.902
 total_flops = 8488192
-# Initial split layers
-split_layer = [6, 6, 6]
+# Initial split layers (length == K, 6 = model_len-1 = no offloading)
+split_layer = [6] * K
 model_len = 7
 
 
@@ -124,7 +143,11 @@ rl_b = 100				   # Batch size
 rl_lr = 0.0003             # parameters for Adam optimizer
 rl_betas = (0.9, 0.999)
 
-node_layer_indices = {'client1': [0, 1], 'client2': [2, 3], 'client3': [4, 5, 6]}
+node_layer_indices = {
+    MACHINE_A_HOSTNAME: [0, 1],
+    VM1_HOSTNAME:       [2, 3],
+    VM2_HOSTNAME:       [4, 5, 6],
+}
 
 # infer times for each device
 iteration = {server['ip']: 5 for server in server_list}
